@@ -1,4 +1,4 @@
-# Copyright 2014-2019 The ODL contributors
+# Copyright 2014-2020 The ODL contributors
 #
 # This file is part of ODL.
 #
@@ -17,7 +17,8 @@ from odl.tomo.backends.astra_setup import (
     astra_algorithm, astra_data, astra_projection_geometry, astra_projector,
     astra_volume_geometry)
 from odl.tomo.geometry import (
-    DivergentBeamGeometry, Geometry, ParallelBeamGeometry)
+    ConeVecGeometry, DivergentBeamGeometry, Geometry, ParallelBeamGeometry,
+    ParallelVecGeometry)
 from odl.util import writable_array
 
 try:
@@ -49,20 +50,28 @@ def default_astra_proj_type(geom):
 
         - `ParallelBeamGeometry`: ``'linear'``
         - `DivergentBeamGeometry`: ``'line_fanflat'``
+        - `ParallelVecGeometry`: ``'linear'``
+        - `ConeVecGeometry`: ``'line_fanflat'``
 
         In 3D:
 
         - `ParallelBeamGeometry`: ``'linear3d'``
         - `DivergentBeamGeometry`: ``'linearcone'``
+        - `ParallelVecGeometry`: ``'linear3d'``
+        - `ConeVecGeometry`: ``'linearcone'``
     """
     if isinstance(geom, ParallelBeamGeometry):
         return 'linear' if geom.ndim == 2 else 'linear3d'
     elif isinstance(geom, DivergentBeamGeometry):
         return 'line_fanflat' if geom.ndim == 2 else 'linearcone'
+    elif isinstance(geom, ParallelVecGeometry):
+        return 'linear' if geom.ndim == 2 else 'linear3d'
+    elif isinstance(geom, ConeVecGeometry):
+        return 'line_fanflat' if geom.ndim == 2 else 'linearcone'
     else:
         raise TypeError(
-            'no default exists for {}, `astra_proj_type` must be given explicitly'
-            ''.format(type(geom))
+            'no default exists for {}, `astra_proj_type` must be given '
+            'explicitly'.format(type(geom))
         )
 
 

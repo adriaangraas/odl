@@ -1,4 +1,4 @@
-# Copyright 2014-2019 The ODL contributors
+# Copyright 2014-2020 The ODL contributors
 #
 # This file is part of ODL.
 #
@@ -32,7 +32,6 @@ __all__ = (
 
 
 class FanBeamGeometry(DivergentBeamGeometry):
-
     """Fan beam (2d cone beam) geometry.
 
     The source moves on a circle with radius ``src_radius``, and the
@@ -41,7 +40,7 @@ class FanBeamGeometry(DivergentBeamGeometry):
     radii can be chosen as 0, which corresponds to a stationary source
     or detector, respectively.
 
-    The motion parameter is the 1d rotation angle parameterizing source
+    The motion parameter is the 1d rotation angle that parametrizes source
     and detector positions simultaneously.
 
     In the standard configuration, the detector is perpendicular to the
@@ -592,7 +591,6 @@ class FanBeamGeometry(DivergentBeamGeometry):
 
 
 class ConeBeamGeometry(DivergentBeamGeometry, AxisOrientedGeometry):
-
     """Cone beam geometry with circular/helical source curve.
 
     The source moves along a spiral oriented along a fixed ``axis``, with
@@ -1034,7 +1032,7 @@ class ConeBeamGeometry(DivergentBeamGeometry, AxisOrientedGeometry):
 
         Parameters
         ----------
-        angles : float or `array-like`
+        angle : float or `array-like`
             Angle(s) in radians describing the counter-clockwise rotation
             of the detector around `axis`.
 
@@ -1466,7 +1464,7 @@ def cone_beam_geometry(space, src_radius, det_radius, num_angles=None,
     # used here is (w/2)/(rs+rd) = rho/rs since both are equal to tan(alpha),
     # where alpha is the half fan angle.
     rs = float(src_radius)
-    if (rs <= rho):
+    if rs <= rho:
         raise ValueError('source too close to the object, resulting in '
                          'infinite detector for full coverage')
     rd = float(det_radius)
@@ -1508,6 +1506,10 @@ def cone_beam_geometry(space, src_radius, det_radius, num_angles=None,
         det_max_pt = [w / 2, h / 2]
         if det_shape is None:
             det_shape = [num_px_horiz, num_px_vert]
+    else:
+        raise ValueError(
+            '`space.ndim` must be 2 or 3, got {}'.format(space.ndim)
+        )
 
     fan_angle = 2 * np.arctan(rho / rs)
     if short_scan:
@@ -1636,7 +1638,7 @@ def helical_geometry(space, src_radius, det_radius, num_turns,
     # used here is (w/2)/(rs+rd) = rho/rs since both are equal to tan(alpha),
     # where alpha is the half fan angle.
     rs = float(src_radius)
-    if (rs <= rho):
+    if rs <= rho:
         raise ValueError('source too close to the object, resulting in '
                          'infinite detector for full coverage')
     rd = float(det_radius)
@@ -1684,7 +1686,6 @@ def helical_geometry(space, src_radius, det_radius, num_turns,
 
 
 class ConeVecGeometry(VecGeometry):
-
     """Cone beam 2D or 3D geometry defined by a collection of vectors.
 
     This geometry gives maximal flexibility for representing locations
@@ -1721,6 +1722,8 @@ class ConeVecGeometry(VecGeometry):
     which corresponds to the assumption that the system moves on piecewise
     linear paths.
     """
+
+    # `rotation_matrix` not implemented; reason: missing
 
     @property
     def _slice_src(self):
@@ -1814,9 +1817,9 @@ class ConeVecGeometry(VecGeometry):
 
         Parameters
         ----------
-        mpar : `motion_params` element
+        mparam : `motion_params` element
             Motion parameter at which to evaluate.
-        dpar : `det_params` element
+        dparam : `det_params` element
             Detector parameter at which to evaluate.
         normalized : bool, optional
             If ``True``, return a normalized (unit) vector.
@@ -1834,8 +1837,10 @@ class ConeVecGeometry(VecGeometry):
                 raise ValueError('`dparam` {} not in the valid range {}'
                                  ''.format(dparam, self.det_params))
 
-        vec = (self.src_position(mparam) -
-               self.det_point_position(mparam, dparam))
+        vec = (
+            self.src_position(mparam)
+            - self.det_point_position(mparam, dparam)
+        )
 
         if normalized:
             # axis = -1 allows this to be vectorized
