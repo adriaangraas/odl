@@ -1705,7 +1705,7 @@ def parallel_beam_geometry(space, num_angles=None, det_shape=None):
 
     Parameters
     ----------
-    space : `DiscreteLp`
+    space : `DiscretizedSpace`
         Reconstruction space, the space of the volumetric data to be projected.
         Needs to be 2d or 3d.
     num_angles : int, optional

@@ -1,4 +1,4 @@
-# Copyright 2014-2019 The ODL contributors
+# Copyright 2014-2020 The ODL contributors
 #
 # This file is part of ODL.
 #
@@ -26,50 +26,44 @@ except ImportError:
 pytestmark = pytest.mark.skipif("not odl.tomo.ASTRA_AVAILABLE")
 
 
-def _discrete_domain(ndim, interp):
-    """Create `DiscreteLp` space with isotropic grid stride.
+def _discrete_domain(ndim):
+    """Create `DiscretizedSpace` space with isotropic grid stride.
 
     Parameters
     ----------
     ndim : `int`
         Number of space dimensions
-    interp : `str`
-        Interpolation scheme
 
     Returns
     -------
-    space : `DiscreteLp`
-        Returns a `DiscreteLp` instance
+    space : `DiscretizedSpace`
+        Returns a `DiscretizedSpace` instance
     """
     max_pt = np.arange(1, ndim + 1)
     min_pt = -max_pt
     shape = np.arange(1, ndim + 1) * 10
 
-    return odl.uniform_discr(min_pt, max_pt, shape=shape, interp=interp,
-                             dtype='float32')
+    return odl.uniform_discr(min_pt, max_pt, shape=shape, dtype='float32')
 
 
-def _discrete_domain_anisotropic(ndim, interp):
-    """Create `DiscreteLp` space with anisotropic grid stride.
+def _discrete_domain_anisotropic(ndim):
+    """Create `DiscretizedSpace` space with anisotropic grid stride.
 
     Parameters
     ----------
     ndim : `int`
         Number of space dimensions
-    interp : `str`
-        Interpolation scheme
 
     Returns
     -------
-    space : `DiscreteLp`
-        Returns a `DiscreteLp` instance
+    space : `DiscretizedSpace`
+        Returns a `DiscretizedSpace` instance
     """
     min_pt = [-1] * ndim
     max_pt = [1] * ndim
     shape = np.arange(1, ndim + 1) * 10
 
-    return odl.uniform_discr(min_pt, max_pt, shape=shape, interp=interp,
-                             dtype='float32')
+    return odl.uniform_discr(min_pt, max_pt, shape=shape, dtype='float32')
 
 
 def test_vol_geom_2d():
@@ -78,7 +72,7 @@ def test_vol_geom_2d():
     y_pts = 20  # y_pts = Columns
 
     # Isotropic voxel case
-    discr_dom = _discrete_domain(2, 'nearest')
+    discr_dom = _discrete_domain(2)
     correct_dict = {
         'GridColCount': y_pts,
         'GridRowCount': x_pts,
@@ -92,7 +86,7 @@ def test_vol_geom_2d():
     assert vol_geom == correct_dict
 
     # Anisotropic voxel case
-    discr_dom = _discrete_domain_anisotropic(2, 'nearest')
+    discr_dom = _discrete_domain_anisotropic(2)
     correct_dict = {
         'GridColCount': y_pts,
         'GridRowCount': x_pts,
@@ -117,7 +111,7 @@ def test_vol_geom_3d():
     z_pts = 30
 
     # Isotropic voxel case
-    discr_dom = _discrete_domain(3, 'nearest')
+    discr_dom = _discrete_domain(3)
     # x = columns, y = rows, z = slices
     correct_dict = {
         'GridColCount': z_pts,
@@ -134,7 +128,7 @@ def test_vol_geom_3d():
     vol_geom = astra_volume_geometry(discr_dom)
     assert vol_geom == correct_dict
 
-    discr_dom = _discrete_domain_anisotropic(3, 'nearest')
+    discr_dom = _discrete_domain_anisotropic(3)
     # x = columns, y = rows, z = slices
     correct_dict = {
         'GridColCount': z_pts,
@@ -220,14 +214,13 @@ VOL_GEOM_2D = {
 
 def test_volume_data_2d():
     """Create ASTRA data structure in 2D."""
-
     # From scratch
     data_id = astra_data(VOL_GEOM_2D, 'volume', ndim=2)
     data_out = astra.data2d.get_shared(data_id)
     assert data_out.shape == (10, 20)
 
     # From existing
-    discr_dom = _discrete_domain(2, 'nearest')
+    discr_dom = _discrete_domain(2)
     data_in = discr_dom.element(np.ones((10, 20), dtype='float32'))
     data_id = astra_data(VOL_GEOM_2D, 'volume', data=data_in)
     data_out = astra.data2d.get_shared(data_id)
@@ -248,7 +241,7 @@ def test_volume_data_3d():
     assert data_out.shape == (10, 20, 30)
 
     # From existing
-    discr_dom = _discrete_domain(3, 'nearest')
+    discr_dom = _discrete_domain(3)
     data_in = discr_dom.element(np.ones((10, 20, 30), dtype='float32'))
     data_id = astra_data(VOL_GEOM_3D, 'volume', data=data_in)
     data_out = astra.data3d.get_shared(data_id)

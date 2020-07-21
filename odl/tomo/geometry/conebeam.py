@@ -1332,7 +1332,7 @@ def cone_beam_geometry(space, src_radius, det_radius, num_angles=None,
 
     Parameters
     ----------
-    space : `DiscreteLp`
+    space : `DiscretizedSpace`
         Reconstruction space, the space of the volumetric data to be
         projected. Must be 2- or 3-dimensional.
     src_radius : nonnegative float
@@ -1556,7 +1556,7 @@ def helical_geometry(space, src_radius, det_radius, num_turns,
 
     Parameters
     ----------
-    space : `DiscreteLp`
+    space : `DiscretizedSpace`
         Reconstruction space, the space of the volumetric data to be
         projected. Must be 3-dimensional.
     src_radius : nonnegative float

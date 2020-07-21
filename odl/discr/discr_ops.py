@@ -1,4 +1,4 @@
-# Copyright 2014-2018 The ODL contributors
+# Copyright 2014-2020 The ODL contributors
 #
 # This file is part of ODL.
 #
@@ -6,37 +6,31 @@
 # v. 2.0. If a copy of the MPL was not distributed with this file, You can
 # obtain one at https://mozilla.org/MPL/2.0/.
 
-"""Operators defined on `DiscreteLp`."""
+"""Operators defined on `DiscretizedSpace`."""
 
-from __future__ import print_function, division, absolute_import
+from __future__ import absolute_import, division, print_function
+
 import numpy as np
 
-from odl.discr import DiscreteLp, uniform_partition
+from odl.discr.discr_space import DiscretizedSpace
+from odl.discr.discr_utils import (
+    _normalize_interp, per_axis_interpolator, point_collocation)
+from odl.discr.partition import uniform_partition
 from odl.operator import Operator
-from odl.set import IntervalProd
-from odl.space import FunctionSpace, tensor_space
+from odl.space import tensor_space
 from odl.util import (
-    normalized_scalar_param_list, safe_int_conv, writable_array, resize_array)
+    normalized_scalar_param_list, resize_array, safe_int_conv, writable_array)
 from odl.util.numerics import _SUPPORTED_RESIZE_PAD_MODES
-
+from odl.util.utility import nullcontext
 
 __all__ = ('Resampling', 'ResizingOperator')
 
 
 class Resampling(Operator):
 
-    """An operator that resamples on a different grid in the same set.
+    """An operator that resamples on a different grid in the same set."""
 
-    The operator uses the underlying `DiscretizedSpace.sampling` and
-    `DiscretizedSpace.interpolation` operators to achieve this.
-
-    The spaces need to have the same `DiscretizedSpace.fspace` in order
-    for this to work. The tensor space implementations may be different,
-    although performance may suffer drastically due to translation
-    steps.
-    """
-
-    def __init__(self, domain, range):
+    def __init__(self, domain, range, interp):
         """Initialize a new instance.
 
         Parameters
@@ -44,41 +38,67 @@ class Resampling(Operator):
         domain : `DiscretizedSpace`
             Set of elements that are to be resampled.
         range : `DiscretizedSpace`
-            Set in which the resampled elements lie.
+            Set in which the resampled elements lie. Must have the same
+            `DiscretizedSpace.domain` as ``domain``.
+        interp : str or sequence of str
+            Interpolation type that should be used to resample. A single
+            value applies to all axes, and a sequence gives the interpolation
+            scheme per axis.
+
+            Supported values: ``'nearest'``, ``'linear'``
 
         Examples
         --------
         Create two spaces with different number of points and a resampling
-        operator.
+        operator using nearest-neighbor interpolation:
 
         >>> coarse_discr = odl.uniform_discr(0, 1, 3)
         >>> fine_discr = odl.uniform_discr(0, 1, 6)
-        >>> resampling = odl.Resampling(coarse_discr, fine_discr)
+        >>> resampling = odl.Resampling(coarse_discr, fine_discr, 'nearest')
         >>> resampling.domain
         uniform_discr(0.0, 1.0, 3)
         >>> resampling.range
         uniform_discr(0.0, 1.0, 6)
+        >>> resampling.interp
+        'nearest'
 
         Apply the corresponding resampling operator to an element:
 
         >>> print(resampling([0, 1, 0]))
         [ 0.,  0.,  1.,  1.,  0.,  0.]
 
-        The result depends on the interpolation chosen for the underlying
-        spaces:
+        With linear interpolation:
 
-        >>> coarse_discr = odl.uniform_discr(0, 1, 3, interp='linear')
-        >>> linear_resampling = odl.Resampling(coarse_discr, fine_discr)
-        >>> print(linear_resampling([0, 1, 0]))
+        >>> resampling = odl.Resampling(coarse_discr, fine_discr, 'linear')
+        >>> print(resampling([0, 1, 0]))
         [ 0.  ,  0.25,  0.75,  0.75,  0.25,  0.  ]
         """
-        if domain.fspace != range.fspace:
-            raise ValueError('`domain.fspace` ({}) does not match '
-                             '`range.fspace` ({})'
-                             ''.format(domain.fspace, range.fspace))
+        if domain.domain != range.domain:
+            raise ValueError(
+                '`domain.domain` ({}) does not match `range.domain` ({})'
+                ''.format(domain.domain, range.domain)
+            )
 
         super(Resampling, self).__init__(
             domain=domain, range=range, linear=True)
+
+        self.__interp_byaxis = _normalize_interp(interp, domain.ndim)
+
+    @property
+    def interp_byaxis(self):
+        """Tuple of per-axis interpolation schemes."""
+        return self.__interp_byaxis
+
+    @property
+    def interp(self):
+        """Interpolation scheme or tuple of per-axis interpolation schemes."""
+        if (
+            len(self.interp_byaxis) != 0
+            and all(s == self.interp_byaxis[0] for s in self.interp_byaxis[1:])
+        ):
+            return self.interp_byaxis[0]
+        else:
+            return self.interp_byaxis
 
     def _call(self, x, out=None):
         """Apply resampling operator.
@@ -86,10 +106,15 @@ class Resampling(Operator):
         The element ``x`` is resampled using the sampling and interpolation
         operators of the underlying spaces.
         """
-        if out is None:
-            return x.interpolation
-        else:
-            out.sampling(x.interpolation)
+        interpolator = per_axis_interpolator(
+            x, self.domain.grid.coord_vectors, self.interp
+        )
+
+        out_ctx = nullcontext() if out is None else writable_array(out)
+        with out_ctx as out_arr:
+            return point_collocation(
+                interpolator, self.range.meshgrid, out=out_arr
+            )
 
     @property
     def inverse(self):
@@ -102,7 +127,7 @@ class Resampling(Operator):
         --------
         adjoint : resampling is unitary, so the adjoint is the inverse.
         """
-        return Resampling(self.range, self.domain)
+        return Resampling(self.range, self.domain, self.interp)
 
     @property
     def adjoint(self):
@@ -122,31 +147,42 @@ class Resampling(Operator):
 
         >>> coarse_discr = odl.uniform_discr(0, 1, 3)
         >>> fine_discr = odl.uniform_discr(0, 1, 6)
-        >>> resampling = odl.Resampling(coarse_discr, fine_discr)
+        >>> resampling = odl.Resampling(coarse_discr, fine_discr, 'nearest')
         >>> resampling_inv = resampling.inverse
 
-        The inverse is proper left inverse if the resampling goes from a
+        The inverse is a proper left inverse if the resampling goes from a
         coarser to a finer sampling:
 
-        >>> x = [0.0, 1.0, 0.0]
+        >>> x = [0, 1, 0]
         >>> print(resampling_inv(resampling(x)))
         [ 0.,  1.,  0.]
 
         However, it can fail in the other direction:
 
-        >>> y = [0.0, 0.0, 0.0, 1.0, 0.0, 0.0]
+        >>> y = [0, 0, 0, 1, 0, 0]
         >>> print(resampling(resampling_inv(y)))
-        [ 0.,  0.,  0.,  0.,  0.,  0.]
+        [ 0.,  0.,  1.,  1.,  0.,  0.]
         """
         return self.inverse
 
 
-class ResizingOperatorBase(Operator):
+class ResizingOperator(Operator):
 
-    """Base class for `ResizingOperator` and its adjoint.
+    """Operator mapping a discretized function to a new domain.
 
-    This is an abstract class used to share code between the forward and
-    adjoint variants of the resizing operator.
+    This operator is a mapping between uniformly discretized
+    `DiscretizedSpace` spaces with the same `DiscretizedSpace.cell_sides`,
+    but different `DiscretizedSpace.shape`. The underlying operation is array
+    resizing, i.e. no resampling is performed.
+    In axes where the domain is enlarged, the new entries are filled
+    ("padded") according to a provided parameter ``pad_mode``.
+
+    All resizing operator variants are linear, except constant padding
+    with constant != 0.
+
+    See `the online documentation
+    <https://odlgroup.github.io/odl/math/resizing_ops.html>`_
+    on resizing operators for mathematical details.
     """
 
     def __init__(self, domain, range=None, ran_shp=None, **kwargs):
@@ -154,10 +190,10 @@ class ResizingOperatorBase(Operator):
 
         Parameters
         ----------
-        domain : uniform `DiscreteLp`
+        domain : uniform `DiscretizedSpace`
             Uniformly discretized space, the operator can be applied
             to its elements.
-        range : uniform `DiscreteLp`, optional
+        range : uniform `DiscretizedSpace`, optional
             Uniformly discretized space in which the result of the
             application of this operator lies.
             For the default ``None``, a space with the same attributes
@@ -260,8 +296,8 @@ class ResizingOperatorBase(Operator):
         import builtins
         ran, range = range, builtins.range
 
-        if not isinstance(domain, DiscreteLp):
-            raise TypeError('`domain` must be a `DiscreteLp` instance, '
+        if not isinstance(domain, DiscretizedSpace):
+            raise TypeError('`domain` must be a `DiscretizedSpace` instance, '
                             'got {!r}'.format(domain))
 
         offset = kwargs.pop('offset', None)
@@ -315,8 +351,7 @@ class ResizingOperatorBase(Operator):
         # padding mode 'constant' with `pad_const != 0` is not linear
         linear = (self.pad_mode != 'constant' or self.pad_const == 0.0)
 
-        super(ResizingOperatorBase, self).__init__(
-            domain, ran, linear=linear)
+        super(ResizingOperator, self).__init__(domain, ran, linear=linear)
 
     @property
     def offset(self):
@@ -338,26 +373,6 @@ class ResizingOperatorBase(Operator):
         """Dimensions in which an actual resizing is performed."""
         return tuple(i for i in range(self.domain.ndim)
                      if self.domain.shape[i] != self.range.shape[i])
-
-
-class ResizingOperator(ResizingOperatorBase):
-
-    """Operator mapping a discretized function to a new domain.
-
-    This operator is a mapping between uniformly discretized
-    `DiscreteLp` spaces with the same `DiscreteLp.cell_sides`,
-    but different `DiscreteLp.shape`. The underlying operation is array
-    resizing, i.e. no resampling is performed.
-    In axes where the domain is enlarged, the new entries are filled
-    ("padded") according to a provided parameter ``pad_mode``.
-
-    All resizing operator variants are linear, except constant padding
-    with constant != 0.
-
-    See `the online documentation
-    <https://odlgroup.github.io/odl/math/resizing_ops.html>`_
-    on resizing operators for mathematical details.
-    """
 
     def _call(self, x, out):
         """Implement ``self(x, out)``."""
@@ -388,9 +403,9 @@ class ResizingOperator(ResizingOperatorBase):
             raise NotImplementedError('this operator is not linear and '
                                       'thus has no adjoint')
 
-        forward_op = self
+        op = self
 
-        class ResizingOperatorAdjoint(ResizingOperatorBase):
+        class ResizingOperatorAdjoint(Operator):
 
             """Adjoint of `ResizingOperator`.
 
@@ -402,15 +417,15 @@ class ResizingOperator(ResizingOperatorBase):
             def _call(self, x, out):
                 """Implement ``self(x, out)``."""
                 with writable_array(out) as out_arr:
-                    resize_array(x.asarray(), self.range.shape,
-                                 offset=self.offset, pad_mode=self.pad_mode,
+                    resize_array(x.asarray(), op.domain.shape,
+                                 offset=op.offset, pad_mode=op.pad_mode,
                                  pad_const=0, direction='adjoint',
                                  out=out_arr)
 
             @property
             def adjoint(self):
                 """Adjoint of the adjoint, i.e. the original operator."""
-                return forward_op
+                return op
 
             @property
             def inverse(self):
@@ -421,11 +436,10 @@ class ResizingOperator(ResizingOperatorBase):
                 operation is not invertible.
                 """
                 return ResizingOperatorAdjoint(
-                    domain=self.range, range=self.domain,
-                    pad_mode=self.pad_mode)
+                    domain=self.range, range=self.domain, pad_mode=op.pad_mode
+                )
 
-        return ResizingOperatorAdjoint(domain=self.range, range=self.domain,
-                                       pad_mode=self.pad_mode)
+        return ResizingOperatorAdjoint(op.range, op.domain, linear=True)
 
     @property
     def inverse(self):
@@ -435,7 +449,7 @@ class ResizingOperator(ResizingOperatorBase):
         acts as left inverse, while in restriction axes, it is a
         right inverse.
         """
-        return ResizingOperator(domain=self.range, range=self.domain,
+        return ResizingOperator(self.range, self.domain,
                                 pad_mode=self.pad_mode,
                                 pad_const=self.pad_const)
 
@@ -479,7 +493,6 @@ def _resize_discr(discr, newshp, offset, discr_kwargs):
     dtype = discr_kwargs.pop('dtype', discr.dtype)
     impl = discr_kwargs.pop('impl', discr.impl)
     exponent = discr_kwargs.pop('exponent', discr.exponent)
-    interp = discr_kwargs.pop('interp', discr.interp)
     weighting = discr_kwargs.pop('weighting', discr.weighting)
 
     affected = np.not_equal(newshp, discr.shape)
@@ -525,8 +538,6 @@ def _resize_discr(discr, newshp, offset, discr_kwargs):
         else:
             new_maxpt.append(grid_max[axis] + (num_r + 0.5) * cell_size[axis])
 
-    fspace = FunctionSpace(IntervalProd(new_minpt, new_maxpt),
-                           out_dtype=dtype)
     tspace = tensor_space(newshp, dtype=dtype, impl=impl, exponent=exponent,
                           weighting=weighting)
 
@@ -541,7 +552,7 @@ def _resize_discr(discr, newshp, offset, discr_kwargs):
         else:
             part = part.append(discr.partition.byaxis[i])
 
-    return DiscreteLp(fspace, part, tspace, interp=interp)
+    return DiscretizedSpace(part, tspace)
 
 
 if __name__ == '__main__':
