@@ -113,7 +113,7 @@ class RayTransform(Operator):
             # runs (one weighting constant).
             if not vol_space.is_weighted:
                 weighting = None
-            elif isinstance(self.geometry, VecGeometry):
+            elif isinstance(geometry, VecGeometry):
                 # No angular weighting
                 weighting = geometry.det_partition.cell_volume
             elif (isinstance(vol_space.weighting, ConstWeighting) and
