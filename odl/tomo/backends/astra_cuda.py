@@ -361,8 +361,8 @@ def astra_cuda_bp_scaling_factor(proj_space, vol_space, geometry):
 
     scaling_factor = angle_weighting * (proj_space.weighting.const /
                                         proj_weighting)
-    scaling_factor /= (reco_space.weighting.const /
-                       reco_space.cell_volume)
+    scaling_factor /= (vol_space.weighting.const /
+                       vol_space.cell_volume)
 
     if parse_version(ASTRA_VERSION) < parse_version('1.8rc1'):
         # Scaling for the old, pre-1.8 behaviour
@@ -501,24 +501,24 @@ def astra_cuda_bp_scaling_factor(proj_space, vol_space, geometry):
             scaling_factor *= (src_radius ** 2 * det_px_area ** 2)
         elif isinstance(geometry, VecGeometry):
             # TODO: correct in 1.8? With differently weighted spaces as well?
-            scaling_factor = reco_space.cell_volume
+            scaling_factor = vol_space.cell_volume
         elif isinstance(geometry, ParallelVecGeometry):
             if geometry.ndim == 2:
                 # Scales with 1 / cell_volume
-                scaling_factor *= float(reco_space.cell_volume)
+                scaling_factor *= float(vol_space.cell_volume)
             elif geometry.ndim == 3:
                 # Scales with cell volume
-                scaling_factor /= reco_space.cell_volume
+                scaling_factor /= vol_space.cell_volume
         elif isinstance(geometry, ConeVecGeometry):
             # TODO: this should be based on the distances per angle, would
             # probably be part of the weighting then
             if geometry.ndim == 2:
                 # Scales with 1 / cell_volume
-                scaling_factor *= float(reco_space.cell_volume)
+                scaling_factor *= float(vol_space.cell_volume)
             elif geometry.ndim == 3:
                 det_px_area = geometry.det_partition.cell_volume
                 scaling_factor *= (det_px_area ** 2 /
-                                   reco_space.cell_volume ** 2)
+                                   vol_space.cell_volume ** 2)
 
     else:
         # Scaling for versions since 1.9.9.dev
