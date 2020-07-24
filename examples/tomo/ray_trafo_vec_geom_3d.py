@@ -19,7 +19,7 @@ reco_space = odl.uniform_discr(
 # Angles: uniformly spaced, n = 180, min = 0, max = 2 * pi
 angle_partition = odl.uniform_partition(0, 2 * np.pi, 180)
 # Detector: uniformly sampled, n = (512, 512), min = (-30, -30), max = (30, 30)
-detector_partition = odl.uniform_partition([-30, -30], [30, 30], [512, 512])
+detector_partition = odl.uniform_partition([-30, -30], [30, 30], [256, 512])
 circle_geometry = odl.tomo.ConeBeamGeometry(
     angle_partition, detector_partition, src_radius=1000, det_radius=100,
     axis=[1, 0, 0])

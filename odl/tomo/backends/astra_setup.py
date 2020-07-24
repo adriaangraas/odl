@@ -383,8 +383,8 @@ def astra_projection_geometry(geometry):
 
     # Cone 3D vec
     elif isinstance(geometry, ConeVecGeometry) and geometry.ndim == 3:
-        det_row_count = geometry.det_partition.shape[1]
-        det_col_count = geometry.det_partition.shape[0]
+        det_row_count = geometry.det_partition.shape[0]
+        det_col_count = geometry.det_partition.shape[1]
         vecs = vecs_odl_to_astra_coords(geometry.vectors)
         proj_geom = astra.create_proj_geom(
             'cone_vec', det_row_count, det_col_count, vecs
